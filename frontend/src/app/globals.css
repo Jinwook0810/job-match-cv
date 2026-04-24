@@ -324,12 +324,64 @@ textarea {
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
-  white-space: pre-wrap;
   line-height: 1.75;
 }
 
 .guide-empty {
   color: var(--muted);
+}
+
+.guide-markdown {
+  display: grid;
+  gap: 12px;
+}
+
+.guide-markdown h3,
+.guide-markdown h4,
+.guide-markdown h5,
+.guide-markdown p,
+.guide-markdown ul,
+.guide-markdown ol {
+  margin: 0;
+}
+
+.guide-markdown h3 {
+  font-size: 22px;
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+
+.guide-markdown h4 {
+  margin-top: 4px;
+  font-size: 17px;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.guide-markdown h5 {
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.guide-markdown p {
+  color: var(--text);
+}
+
+.guide-markdown ul,
+.guide-markdown ol {
+  padding-left: 20px;
+}
+
+.guide-markdown li + li {
+  margin-top: 6px;
+}
+
+.guide-markdown strong {
+  color: #0e3d35;
 }
 
 @media (max-width: 980px) {
