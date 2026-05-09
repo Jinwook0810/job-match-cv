@@ -6,6 +6,7 @@ Usage:
 """
 
 import os
+from pathlib import Path
 
 import chromadb
 
@@ -13,6 +14,7 @@ os.environ["USE_TF"] = "0"
 os.environ["TRANSFORMERS_NO_TF"] = "1"
 
 from services.adzuna import fetch_jobs, parse_job
+from services.storage import init_db, reset_jobs_table, upsert_job_records
 from services.vector_store import COLLECTION_NAME, upsert_jobs
 
 SEARCHES = [
@@ -36,10 +38,11 @@ SEARCHES = [
 ]
 PAGES = 3
 RESULTS_PER_PAGE = 20
+CHROMA_PATH = Path(__file__).resolve().parent / "chroma_db"
 
 
 def reset_collection() -> None:
-    client = chromadb.PersistentClient(path="./chroma_db")
+    client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     try:
         client.delete_collection(COLLECTION_NAME)
         print(f"Deleted existing Chroma collection: {COLLECTION_NAME}")
@@ -47,8 +50,15 @@ def reset_collection() -> None:
         print(f"No existing Chroma collection to delete: {COLLECTION_NAME}")
 
 
+def reset_job_store() -> None:
+    reset_jobs_table()
+    print("Cleared existing SQLite jobs table")
+
+
 def main():
+    init_db()
     reset_collection()
+    reset_job_store()
 
     total_requested = 0
     for search in SEARCHES:
@@ -67,13 +77,14 @@ def main():
                 if not jobs:
                     print("no usable jobs")
                     continue
+                upsert_job_records(jobs)
                 stored = upsert_jobs(jobs)
                 print(f"stored {stored}")
                 total_requested += stored
             except Exception as e:
                 print(f"error: {e}")
 
-    client = chromadb.PersistentClient(path="./chroma_db")
+    client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     final_count = client.get_collection(COLLECTION_NAME).count()
 
     print("\nFinished seeding ChromaDB.")

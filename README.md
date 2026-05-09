@@ -1,30 +1,195 @@
 # Job Match CV
 
-Paste a LinkedIn profile into the web app, get 5 job recommendations, select one, and generate a tailored resume/CV writing guide.
+Search New York jobs directly, or prepare a LinkedIn/resume profile for AI-based matching and CV tailoring.
 
-## What It Does
+## Overview
 
-This project is a small full-stack prototype for job matching and resume guidance.
+This project is a full-stack prototype for two related workflows:
 
-Flow:
+1. `Search Jobs`
+   Search and filter a stored New York job corpus directly, page through the results, and optionally group the filtered set with semantic clustering.
+2. `Profile + AI Match`
+   Paste LinkedIn text or upload a resume, extract a reusable profile representation with an LLM, retrieve top semantic matches, and generate a tailored CV guide for a selected role.
 
-1. The user copies the full text of a LinkedIn profile and pastes it into the web app.
-2. The backend uses an LLM to extract job-relevant structured profile data.
-3. The backend converts that into a semantic search summary and queries ChromaDB.
-4. The app returns the top 5 matching jobs.
-5. When the user selects one job, that selection is stored in SQLite.
-6. For the selected job, the backend tries to fetch a fuller job page text.
-7. The backend uses the candidate profile plus the selected job text to generate a tailored CV guide.
+The system is intentionally split into:
+
+- structured search and pagination from SQL
+- semantic retrieval from a vector store
+- LLM-based profile extraction and CV guidance
+
+## Current Product Flow
+
+### Search Jobs
+
+1. The app loads a stored New York job corpus.
+2. The user searches and filters by:
+   - query text
+   - role focus
+   - salary floor
+3. The user can:
+   - browse paginated job results
+   - or cluster the filtered result set with `PCA + K-means`
+4. If a profile has already been prepared, selecting a searched job can generate a CV guide.
+
+### Profile + AI Match
+
+1. The user either:
+   - pastes LinkedIn profile text
+   - or uploads a resume (`.pdf`, `.docx`, `.txt`)
+2. The backend uses an LLM to produce:
+   - `structured_profile`
+   - `search_text`
+3. `search_text` is embedded and used to retrieve the top semantic matches from ChromaDB.
+4. When the user selects a recommended role, the app logs the selection and generates a CV guide.
 
 ## Current Stack
 
 - Frontend: Next.js 15, React 19, TypeScript
 - Backend: FastAPI
-- Vector store: ChromaDB
+- Relational storage: SQLite
+- Vector storage: ChromaDB
 - Embedding model: `BAAI/bge-base-en-v1.5`
 - LLM: OpenAI API
 - Job source: Adzuna API
-- Relational/event storage: SQLite
+
+## Data Architecture
+
+The project now uses **both** SQLite and ChromaDB for the job corpus.
+
+### SQLite
+
+Path:
+
+- [backend/app.db](C:\Users\USER\Desktop\대학교 자료\4-1학기(NYU)\Seminar in Applied ML&AI Tools for Technology Management\job-match-cv\backend\app.db)
+
+Used for:
+
+- `jobs` table for structured search, filtering, and pagination
+- `profiles`
+- `recommendation_sessions`
+- `job_selections`
+- `job_browse_events`
+- `job_browse_selections`
+- `job_page_cache`
+
+### ChromaDB
+
+Path:
+
+- [backend/chroma_db](C:\Users\USER\Desktop\대학교 자료\4-1학기(NYU)\Seminar in Applied ML&AI Tools for Technology Management\job-match-cv\backend\chroma_db)
+
+Used for:
+
+- semantic job retrieval from embeddings
+
+### Why Both?
+
+- SQLite handles structured access well:
+  - search
+  - filtering
+  - pagination
+  - logging
+  - future analytics
+- ChromaDB handles semantic similarity retrieval well.
+
+This is closer to a practical production-style split:
+
+- SQL for structured data access
+- vector DB for semantic matching
+
+## Stored Job Corpus
+
+Current Adzuna seed strategy:
+
+- location: `New York`
+- 17 role-oriented search keywords
+- up to 3 pages per keyword
+- 20 results per page
+
+Current unique job count after the latest refresh:
+
+- `924` jobs in SQLite
+- `924` jobs in ChromaDB
+
+Current seeded keywords:
+
+- `data scientist`
+- `data analyst`
+- `business intelligence analyst`
+- `machine learning engineer`
+- `business analyst`
+- `product analyst`
+- `strategy analyst`
+- `insights analyst`
+- `operations analyst`
+- `healthcare analyst`
+- `market research analyst`
+- `project manager`
+- `program manager`
+- `product manager`
+- `management consultant`
+- `data engineer`
+- `AI engineer`
+
+Each stored job record includes:
+
+- `id`
+- `title`
+- `company`
+- `location`
+- `description`
+- `salary_min`
+- `salary_max`
+- `url`
+- `category`
+- `created`
+
+## AI and Data Science Components
+
+### 1. Profile Representation
+
+`backend/services/profile_extractor.py`
+
+The backend converts raw LinkedIn/resume text into:
+
+- `structured_profile`
+- `search_text`
+
+This makes the user profile usable for both:
+
+- semantic retrieval
+- later analytics / future recommendation modeling
+
+### 2. Semantic Retrieval
+
+`backend/services/vector_store.py`
+
+Jobs are stored as embeddings derived from job text and queried with the profile search text.
+
+This is the main recommendation engine for `AI Match`.
+
+### 3. Job Clustering
+
+`backend/services/job_clustering.py`
+
+For the `Search Jobs` tab, the filtered result set can be grouped using:
+
+- text embeddings from job title/category/description
+- optional PCA dimensionality reduction
+- K-means clustering
+
+This is used as an exploratory job-discovery feature rather than the main recommendation engine.
+
+### 4. CV Guide Generation
+
+`backend/api/cv.py`
+
+When a user selects a job:
+
+- the app optionally logs the event
+- tries to fetch fuller job text
+- uses the selected job plus the prepared profile
+- generates a tailored CV guide
 
 ## Project Structure
 
@@ -37,6 +202,8 @@ job-match-cv/
 │  │  └─ match.py
 │  ├─ services/
 │  │  ├─ adzuna.py
+│  │  ├─ document_parser.py
+│  │  ├─ job_clustering.py
 │  │  ├─ job_page.py
 │  │  ├─ llm.py
 │  │  ├─ profile_extractor.py
@@ -53,116 +220,50 @@ job-match-cv/
 │  │  └─ components/
 │  ├─ package.json
 │  └─ tsconfig.json
-└─ README.md
+├─ README.md
+├─ REPORT.md
+├─ REPORT.docx
+└─ REPORT.pdf
 ```
 
-## Core Backend Flow
+## API Summary
 
-### 1. Profile Extraction
+### Match / Profile Preparation
 
-`backend/services/profile_extractor.py`
+- `POST /match/profile`
+  - prepare a profile from pasted LinkedIn text
+- `POST /match/profile/upload`
+  - prepare a profile from uploaded resume text
+- `POST /match/recommend`
+  - generate top semantic matches for a prepared profile
+- `POST /match/select`
+  - log a selected AI-recommended job
 
-The pasted LinkedIn text is converted into:
+### Search / Browse
 
-- `structured_profile`
-- `search_text`
+- `GET /jobs/browse`
+  - structured search and pagination over the SQL job corpus
+- `GET /jobs/cluster`
+  - cluster the currently filtered result set with PCA + K-means
+- `POST /jobs/browse/select`
+  - log a selected searched/browsed job
+- `POST /jobs/fetch`
+  - fetch and store more jobs from Adzuna
 
-`search_text` is used for semantic retrieval.
-`structured_profile` is stored for later analysis and CV generation.
+### CV
 
-### 2. Job Retrieval
+- `POST /cv/guide`
+  - generate a guide from an AI recommendation session
+- `POST /cv/guide/profile`
+  - generate a guide from a prepared profile and a searched job
 
-`backend/services/vector_store.py`
+### Health
 
-Jobs are embedded into ChromaDB using:
-
-- `title`
-- `company`
-- `description`
-
-Stored metadata includes:
-
-- `id`
-- `title`
-- `company`
-- `location`
-- `salary_min`
-- `salary_max`
-- `url`
-- `category`
-- `description`
-
-### 3. Recommendation Logging
-
-`backend/services/storage.py`
-
-The backend stores:
-
-- raw LinkedIn text
-- extracted structured profile
-- search summary
-- recommendation session
-- selected job
-
-This is intended to support future recommender analysis and model improvement.
-
-### 4. CV Guide Generation
-
-`backend/api/cv.py`
-
-When the user selects a job:
-
-- the selection is logged
-- the backend attempts to fetch a fuller job page text
-- cached page text is reused when available
-- the LLM generates a tailored CV guide
-
-## Database
-
-SQLite database path:
-
-- [backend/app.db](C:\Users\USER\Desktop\대학교 자료\4-1학기(NYU)\Seminar in Applied ML&AI Tools for Technology Management\job-match-cv\backend\app.db)
-
-Current tables:
-
-- `profiles`
-- `recommendation_sessions`
-- `job_selections`
-- `job_page_cache`
-
-What this enables:
-
-- analyze which recommended jobs users actually click/select
-- compare profiles against chosen roles
-- study company/category selection patterns
-- later build a reranker or recommender using logged selections
-
-## ChromaDB Contents
-
-Current seeding strategy:
-
-- 8 role keywords
-- 2 pages per keyword
-- 20 results per page
-
-Current total after latest seed:
-
-- 320 jobs
-
-Keywords currently used:
-
-- `data scientist`
-- `data analyst`
-- `machine learning engineer`
-- `software engineer`
-- `product manager`
-- `business analyst`
-- `data engineer`
-- `AI engineer`
+- `GET /health`
 
 ## Environment Variables
 
-Backend example:
+### Backend
 
 ```env
 ADZUNA_APP_ID=your_app_id_here
@@ -171,7 +272,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_CV_MODEL=gpt-4o-mini
 ```
 
-Frontend example:
+### Frontend
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
@@ -193,7 +294,7 @@ cd "C:\Users\USER\Desktop\대학교 자료\4-1학기(NYU)\Seminar in Applied ML&
 npm install
 ```
 
-## Run
+## Run Locally
 
 ### 1. Start Backend
 
@@ -215,88 +316,60 @@ npm run dev
 
 Notes:
 
-- `http://localhost:3000` is the actual user-facing website.
+- `http://localhost:3000` is the user-facing web app.
 - `http://127.0.0.1:8000` is the backend API server.
-- `http://127.0.0.1:8000/health` can be used as a health check.
+- `http://127.0.0.1:8000/health` is the backend health check.
 
-## Seed Jobs from Adzuna
+## Refresh the Job Corpus
 
-To rebuild the ChromaDB job store:
+To rebuild both the SQL job table and the ChromaDB collection from Adzuna:
 
 ```powershell
 cd "C:\Users\USER\Desktop\대학교 자료\4-1학기(NYU)\Seminar in Applied ML&AI Tools for Technology Management\job-match-cv\backend"
 py -3 seed_jobs.py
 ```
 
-What this currently does:
+This currently:
 
-- deletes the existing Chroma collection
-- fetches fresh jobs from Adzuna
-- embeds the jobs
-- stores them back into ChromaDB
-
-## API Endpoints
-
-### `POST /match/`
-
-Input:
-
-```json
-{
-  "experience": "full pasted LinkedIn text",
-  "n_results": 5
-}
-```
-
-Returns:
-
-- `profile_id`
-- `session_id`
-- `search_text`
-- `structured_profile`
-- `matches`
-
-### `POST /match/select`
-
-Logs which recommended job the user selected.
-
-### `POST /cv/guide`
-
-Uses:
-
-- stored candidate profile
-- selected job metadata
-- fuller job page text when available
-
-Returns:
-
-- generated CV guide text
+- clears the SQL `jobs` table
+- recreates the Chroma `jobs` collection
+- fetches fresh Adzuna jobs
+- writes them into both SQLite and ChromaDB
 
 ## Current Limitations
 
-- Recommendation quality depends on Adzuna coverage and the current keyword seed list.
-- The embedding model is solid but not the strongest open model available.
-- Job matching uses Adzuna snippet text, while fuller job text is fetched only after selection.
-- Some Adzuna redirect URLs are blocked directly, so the backend falls back to Adzuna detail pages where possible.
-- The current selection logging is useful, but still minimal for serious recommender analytics.
+- Adzuna search descriptions are snippet-level, not full job postings.
+- The `category` field is useful but too broad for fine-grained role filtering.
+- Early-career filtering was removed because Adzuna does not expose a reliable seniority label in the public search API.
+- The current clustering view is exploratory and heuristic; it is not a user-feedback-trained role taxonomy.
+- The system logs interactions in SQLite, so the current architecture is better for local/demo use than for serverless production deployment.
 
-## Good Next Improvements
+## Why the Logging Layer Matters
 
-- store recommendation rank position for each selected job
-- log non-click impressions as separate events
-- add user/session identifiers beyond a single recommendation session
-- improve query-side embedding prompts or upgrade the embedding model
-- support scheduled job refresh
-- add admin or analytics views for stored recommendation/select data
+The project already stores:
+
+- prepared profiles
+- recommendation sessions
+- AI match selections
+- browse/search events
+- browse selections
+
+This means the system can later support:
+
+- click / selection analysis
+- reranking experiments
+- supervised recommendation models once enough interactions accumulate
 
 ## Summary
 
 This repository currently supports:
 
-- LinkedIn paste to structured profile extraction
-- semantic job recommendation from ChromaDB
-- logging of selected jobs into SQLite
-- fuller selected-job text extraction
-- tailored CV guide generation
+- direct job search from a stored New York corpus
+- pagination and structured SQL filtering
+- semantic clustering over filtered result sets
+- LinkedIn paste or resume upload for profile preparation
+- semantic AI job matching with ChromaDB
+- CV guide generation from either searched or recommended jobs
+- user interaction logging for future recommendation-system analysis
 
-It is a practical prototype for testing job matching, resume guidance, and future recommendation-system analysis.
+It is a practical prototype for combining structured search, semantic retrieval, LLM-based profile understanding, and future recommender-system experimentation.

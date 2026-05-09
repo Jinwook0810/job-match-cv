@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
@@ -8,6 +9,7 @@ from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "BAAI/bge-base-en-v1.5"
 COLLECTION_NAME = "jobs"
+CHROMA_PATH = Path(__file__).resolve().parent.parent / "chroma_db"
 
 _client = None
 _model = None
@@ -16,14 +18,14 @@ _model = None
 def get_client():
     global _client
     if _client is None:
-        _client = chromadb.PersistentClient(path="./chroma_db")
+        _client = chromadb.PersistentClient(path=str(CHROMA_PATH))
     return _client
 
 
 def get_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        _model = SentenceTransformer(MODEL_NAME)
+        _model = SentenceTransformer(MODEL_NAME, local_files_only=True)
     return _model
 
 
@@ -81,6 +83,26 @@ def query_jobs(experience_text: str, n_results: int = 5) -> list[dict]:
                 "id": metadata.get("id", ""),
                 "description": description,
                 "score": round(1 - results["distances"][0][i], 4),
+            }
+        )
+    return jobs
+
+
+def list_jobs() -> list[dict]:
+    collection = get_collection()
+    results = collection.get(include=["metadatas", "documents"])
+
+    jobs = []
+    for i, metadata in enumerate(results.get("metadatas") or []):
+        if metadata is None:
+            continue
+        ids = results.get("ids") or []
+        documents = results.get("documents") or []
+        jobs.append(
+            {
+                **metadata,
+                "id": metadata.get("id", ids[i] if i < len(ids) else ""),
+                "description": metadata.get("description") or (documents[i] if i < len(documents) else ""),
             }
         )
     return jobs
